@@ -9,7 +9,6 @@ A desktop-based application built using Java Swing, JDBC, and MySQL to manage bi
 - Automatic age calculation
 - Calculate days remaining until the next birthday
 - View today's and upcoming birthdays
-- Set custom reminder days
 - Add relationship and notes
 - MySQL database integration
 
