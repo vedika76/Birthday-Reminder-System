@@ -2,3410 +2,373 @@ import java.sql.*;
 import javax.swing.*;
 import javax.swing.table.*;
 import java.awt.*;
-import java.awt.event.*;
 import java.time.*;
-import java.time.format.*;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.List;
 
-
-// ============================================================
-// PLACEHOLDER TEXT FIELD
-// ============================================================
-
-class PlaceholderTextField extends JTextField {
-
-    private String placeholder;
-
-    public PlaceholderTextField(String placeholder) {
-
-        this.placeholder = placeholder;
-
-        setForeground(Color.BLACK);
-
-        addFocusListener(new FocusAdapter() {
-
-            @Override
-            public void focusGained(FocusEvent e) {
-                repaint();
-            }
-
-            @Override
-            public void focusLost(FocusEvent e) {
-                repaint();
-            }
-        });
-    }
-
-    @Override
-    protected void paintComponent(Graphics g) {
-
-        super.paintComponent(g);
-
-        if (getText().isEmpty() && !isFocusOwner()) {
-
-            Graphics2D g2 = (Graphics2D) g.create();
-
-            g2.setColor(new Color(170, 170, 170));
-
-            g2.setFont(getFont());
-
-            FontMetrics fm = g2.getFontMetrics();
-
-            int x = getInsets().left + 4;
-
-            int y = (getHeight() - fm.getHeight()) / 2
-                    + fm.getAscent();
-
-            g2.drawString(
-                    placeholder,
-                    x,
-                    y
-            );
-
-            g2.dispose();
-        }
-    }
-}
-
-
-// ============================================================
-// CONTACT MODEL
-// ============================================================
-
 class Contact {
-
     private int id;
-    private String name;
-    private String email;
-    private String phone;
-    private String relationship;
-    private String notes;
-
+    private String name, relationship, notes;
     private LocalDate birthDate;
-    private int reminderDays;
+    private int reminderDays = 7;
 
-
-    public Contact() {
-
-        reminderDays = 7;
-    }
-
-
-    public int getId() {
-        return id;
-    }
-
-
-    public void setId(int id) {
-        this.id = id;
-    }
-
-
-    public String getName() {
-        return name;
-    }
-
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-
-    public String getEmail() {
-        return email;
-    }
-
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-
-    public String getPhone() {
-        return phone;
-    }
-
-
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
-
-    public LocalDate getBirthDate() {
-        return birthDate;
-    }
-
-
-    public void setBirthDate(LocalDate birthDate) {
-        this.birthDate = birthDate;
-    }
-
-
-    public String getRelationship() {
-        return relationship;
-    }
-
-
-    public void setRelationship(String relationship) {
-        this.relationship = relationship;
-    }
-
-
-    public int getReminderDays() {
-        return reminderDays;
-    }
-
-
-    public void setReminderDays(int reminderDays) {
-        this.reminderDays = reminderDays;
-    }
-
-
-    public String getNotes() {
-        return notes;
-    }
-
-
-    public void setNotes(String notes) {
-        this.notes = notes;
-    }
-
-
-    // ========================================================
-    // CALCULATE AGE
-    // ========================================================
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public LocalDate getBirthDate() { return birthDate; }
+    public void setBirthDate(LocalDate d) { this.birthDate = d; }
+    public String getRelationship() { return relationship; }
+    public void setRelationship(String r) { this.relationship = r; }
+    public String getNotes() { return notes; }
+    public void setNotes(String n) { this.notes = n; }
+    public int getReminderDays() { return reminderDays; }
+    public void setReminderDays(int r) { this.reminderDays = r; }
 
     public int getAge() {
-
-        if (birthDate == null) {
-            return 0;
-        }
-
-        LocalDate today = LocalDate.now();
-
-        return Period.between(
-                birthDate,
-                today
-        ).getYears();
+        return birthDate == null ? 0 : Period.between(birthDate, LocalDate.now()).getYears();
     }
-
-
-    // ========================================================
-    // CALCULATE DAYS UNTIL NEXT BIRTHDAY
-    // ========================================================
 
     public long getDaysUntilBirthday() {
-
-        if (birthDate == null) {
-            return -1;
-        }
-
+        if (birthDate == null) return -1;
         LocalDate today = LocalDate.now();
-
-        LocalDate nextBirthday =
-                birthDate.withYear(today.getYear());
-
-
-        // If birthday already passed this year,
-        // calculate for next year
-
-        if (nextBirthday.isBefore(today)) {
-
-            nextBirthday =
-                    nextBirthday.plusYears(1);
-        }
-
-
-        return ChronoUnit.DAYS.between(
-                today,
-                nextBirthday
-        );
+        LocalDate next = birthDate.withYear(today.getYear());
+        if (next.isBefore(today)) next = next.plusYears(1);
+        return ChronoUnit.DAYS.between(today, next);
     }
-
-
-    // ========================================================
-    // CHECK IF BIRTHDAY IS TODAY
-    // ========================================================
 
     public boolean isBirthdayToday() {
-
-        if (birthDate == null) {
-            return false;
-        }
-
         LocalDate today = LocalDate.now();
-
-        return birthDate.getMonthValue()
-                == today.getMonthValue()
-
-                &&
-
-                birthDate.getDayOfMonth()
-                        == today.getDayOfMonth();
+        return birthDate.getMonthValue() == today.getMonthValue()
+                && birthDate.getDayOfMonth() == today.getDayOfMonth();
     }
 }
 
-
-// ============================================================
-// DATE UTILITIES
-// ============================================================
-
+// ===================== DATE UTILITIES =====================
 class DateUtils {
+    private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DISPLAY = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
-    private static final DateTimeFormatter DB_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    public static LocalDate parse(String date) { return LocalDate.parse(date, FORMAT); }
 
-
-    private static final DateTimeFormatter DISPLAY_FORMAT =
-            DateTimeFormatter.ofPattern("dd MMM yyyy");
-
-
-    public static LocalDate parseDate(String date) {
-
-        return LocalDate.parse(
-                date,
-                DB_FORMAT
-        );
+    public static boolean isValid(String date) {
+        try { parse(date); return true; } catch (Exception e) { return false; }
     }
 
-
-    public static String formatDate(LocalDate date) {
-
-        if (date == null) {
-            return "";
-        }
-
-        return date.format(
-                DISPLAY_FORMAT
-        );
-    }
-
-
-    public static String formatForDB(LocalDate date) {
-
-        if (date == null) {
-            return "";
-        }
-
-        return date.format(
-                DB_FORMAT
-        );
-    }
-
-
-    public static boolean isValidDate(String date) {
-
-        try {
-
-            parseDate(date);
-
-            return true;
-
-        } catch (Exception e) {
-
-            return false;
-        }
-    }
+    public static String display(LocalDate date) { return date == null ? "" : date.format(DISPLAY); }
 }
 
-
-// ============================================================
-// DATABASE MANAGER
-// ============================================================
-
+// ===================== DATABASE MANAGER =====================
 class DatabaseManager {
-
-    private static final String URL =
-            "jdbc:mysql://localhost:3306/birthday_db?useSSL=false&serverTimezone=UTC";
-
-
-    private static final String USER =
-            "root";
-
-
-    // CHANGE PASSWORD IF YOUR MYSQL PASSWORD IS DIFFERENT
-
-    private static final String PASSWORD =
-            "1234";
-
-
-    private static Connection connection = null;
-
-
-    public static Connection getConnection() {
-
-        if (connection == null) {
-
-            try {
-
-                Class.forName(
-                        "com.mysql.cj.jdbc.Driver"
-                );
-
-
-                connection =
-                        DriverManager.getConnection(
-                                URL,
-                                USER,
-                                PASSWORD
-                        );
-
-
-                System.out.println(
-                        "Database connected successfully!"
-                );
-
-
-            } catch (Exception e) {
-
-                System.out.println(
-                        "Database connection failed!"
-                );
-
-                e.printStackTrace();
-            }
-        }
-
-
-        return connection;
-    }
-
-
-    // ========================================================
-    // SETUP DATABASE
-    // ========================================================
+    private static final String URL = "jdbc:mysql://localhost:3306/birthday_db?useSSL=false&serverTimezone=UTC";
+    private static final String USER = "root";
+    private static final String PASSWORD = "1234";
+    private static Connection connection;
 
     public static void setupDatabase() {
-
         try {
-
-            Connection tempConnection =
-
-                    DriverManager.getConnection(
-
-                            "jdbc:mysql://localhost:3306/?useSSL=false&serverTimezone=UTC",
-
-                            USER,
-
-                            PASSWORD
-                    );
-
-
-            Statement statement =
-                    tempConnection.createStatement();
-
-
-            statement.executeUpdate(
-
-                    "CREATE DATABASE IF NOT EXISTS birthday_db"
-            );
-
-
-            statement.executeUpdate(
-
-                    "USE birthday_db"
-            );
-
-
-            statement.executeUpdate(
-
-                    "CREATE TABLE IF NOT EXISTS contacts (" +
-
-                            "id INT AUTO_INCREMENT PRIMARY KEY," +
-
-                            "name VARCHAR(100) NOT NULL," +
-
-                            "email VARCHAR(100)," +
-
-                            "phone VARCHAR(20)," +
-
-                            "birth_date DATE NOT NULL," +
-
-                            "relationship VARCHAR(50)," +
-
-                            "reminder_days INT DEFAULT 7," +
-
-                            "notes TEXT)"
-            );
-
-
-            statement.close();
-
-            tempConnection.close();
-
-
-            System.out.println(
-                    "Database setup complete!"
-            );
-
-
-        } catch (Exception e) {
-
-            e.printStackTrace();
-        }
+            Connection con = DriverManager.getConnection(
+                    "jdbc:mysql://localhost:3306/?useSSL=false&serverTimezone=UTC", USER, PASSWORD);
+            Statement st = con.createStatement();
+            st.executeUpdate("CREATE DATABASE IF NOT EXISTS birthday_db");
+            st.executeUpdate("USE birthday_db");
+            st.executeUpdate("CREATE TABLE IF NOT EXISTS contacts (" +
+                    "id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, " +
+                    "birth_date DATE NOT NULL, relationship VARCHAR(50), " +
+                    "reminder_days INT DEFAULT 7, notes TEXT)");
+            st.close();
+            con.close();
+        } catch (SQLException e) { e.printStackTrace(); }
     }
-}
 
-
-// ============================================================
-// DAO INTERFACE
-// ============================================================
-
-interface ContactDAO {
-
-    boolean add(Contact contact);
-
-    boolean update(Contact contact);
-
-    boolean delete(int id);
-
-    Contact getById(int id);
-
-    List<Contact> getAll();
-
-    List<Contact> getTodayBirthdays();
-
-    List<Contact> getUpcoming(int days);
-
-    List<Contact> search(String keyword);
-}
-
-
-// ============================================================
-// DAO IMPLEMENTATION
-// ============================================================
-
-class ContactDAOImpl implements ContactDAO {
-
-
-    @Override
-    public boolean add(Contact contact) {
-
-        String sql =
-
-                "INSERT INTO contacts " +
-
-                        "(name, email, phone, birth_date, relationship, reminder_days, notes) " +
-
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)";
-
-
-        try (
-
-                PreparedStatement preparedStatement =
-
-                        DatabaseManager.getConnection()
-                                .prepareStatement(
-                                        sql,
-                                        Statement.RETURN_GENERATED_KEYS
-                                )
-        ) {
-
-            preparedStatement.setString(
-                    1,
-                    contact.getName()
-            );
-
-
-            preparedStatement.setString(
-                    2,
-                    ""
-            );
-
-
-            preparedStatement.setString(
-                    3,
-                    ""
-            );
-
-
-            preparedStatement.setDate(
-
-                    4,
-
-                    java.sql.Date.valueOf(
-                            contact.getBirthDate()
-                    )
-            );
-
-
-            preparedStatement.setString(
-                    5,
-                    contact.getRelationship()
-            );
-
-
-            preparedStatement.setInt(
-                    6,
-                    contact.getReminderDays()
-            );
-
-
-            preparedStatement.setString(
-                    7,
-                    contact.getNotes()
-            );
-
-
-            int rowsAffected =
-                    preparedStatement.executeUpdate();
-
-
-            if (rowsAffected > 0) {
-
-                ResultSet generatedKeys =
-                        preparedStatement.getGeneratedKeys();
-
-
-                if (generatedKeys.next()) {
-
-                    contact.setId(
-                            generatedKeys.getInt(1)
-                    );
-                }
-
-
-                generatedKeys.close();
-
-                return true;
+    public static Connection getConnection() {
+        try {
+            if (connection == null || connection.isClosed()) {
+                Class.forName("com.mysql.cj.jdbc.Driver");
+                connection = DriverManager.getConnection(URL, USER, PASSWORD);
             }
+        } catch (Exception e) { e.printStackTrace(); }
+        return connection;
+    }
+}
 
 
-            return false;
+class ContactDAO {
 
-
-        } catch (SQLException e) {
-
-            e.printStackTrace();
-
-            return false;
-        }
+    public boolean add(Contact c) {
+        String sql = "INSERT INTO contacts (name,birth_date,relationship,reminder_days,notes) VALUES (?,?,?,?,?)";
+        try {
+            PreparedStatement ps = DatabaseManager.getConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, c.getName());
+            ps.setDate(2, java.sql.Date.valueOf(c.getBirthDate()));
+            ps.setString(3, c.getRelationship());
+            ps.setInt(4, c.getReminderDays());
+            ps.setString(5, c.getNotes());
+            boolean result = ps.executeUpdate() > 0;
+            if (result) {
+                ResultSet rs = ps.getGeneratedKeys();
+                if (rs.next()) c.setId(rs.getInt(1));
+                rs.close();
+            }
+            ps.close();
+            return result;
+        } catch (SQLException e) { e.printStackTrace(); return false; }
     }
 
-
-    // ========================================================
-    // UPDATE CONTACT
-    // ========================================================
-
-    @Override
-    public boolean update(Contact contact) {
-
-        String sql =
-
-                "UPDATE contacts SET " +
-
-                        "name=?, " +
-
-                        "birth_date=?, " +
-
-                        "relationship=?, " +
-
-                        "reminder_days=?, " +
-
-                        "notes=? " +
-
-                        "WHERE id=?";
-
-
-        try (
-
-                PreparedStatement preparedStatement =
-
-                        DatabaseManager.getConnection()
-                                .prepareStatement(sql)
-        ) {
-
-            preparedStatement.setString(
-                    1,
-                    contact.getName()
-            );
-
-
-            preparedStatement.setDate(
-
-                    2,
-
-                    java.sql.Date.valueOf(
-                            contact.getBirthDate()
-                    )
-            );
-
-
-            preparedStatement.setString(
-                    3,
-                    contact.getRelationship()
-            );
-
-
-            preparedStatement.setInt(
-                    4,
-                    contact.getReminderDays()
-            );
-
-
-            preparedStatement.setString(
-                    5,
-                    contact.getNotes()
-            );
-
-
-            preparedStatement.setInt(
-                    6,
-                    contact.getId()
-            );
-
-
-            return preparedStatement.executeUpdate() > 0;
-
-
-        } catch (SQLException e) {
-
-            e.printStackTrace();
-
-            return false;
-        }
+    public boolean update(Contact c) {
+        String sql = "UPDATE contacts SET name=?,birth_date=?,relationship=?,reminder_days=?,notes=? WHERE id=?";
+        try {
+            PreparedStatement ps = DatabaseManager.getConnection().prepareStatement(sql);
+            ps.setString(1, c.getName());
+            ps.setDate(2, java.sql.Date.valueOf(c.getBirthDate()));
+            ps.setString(3, c.getRelationship());
+            ps.setInt(4, c.getReminderDays());
+            ps.setString(5, c.getNotes());
+            ps.setInt(6, c.getId());
+            boolean result = ps.executeUpdate() > 0;
+            ps.close();
+            return result;
+        } catch (SQLException e) { e.printStackTrace(); return false; }
     }
 
-
-    // ========================================================
-    // DELETE CONTACT
-    // ========================================================
-
-    @Override
     public boolean delete(int id) {
-
-        String sql =
-                "DELETE FROM contacts WHERE id=?";
-
-
-        try (
-
-                PreparedStatement preparedStatement =
-
-                        DatabaseManager.getConnection()
-                                .prepareStatement(sql)
-        ) {
-
-            preparedStatement.setInt(
-                    1,
-                    id
-            );
-
-
-            return preparedStatement.executeUpdate() > 0;
-
-
-        } catch (SQLException e) {
-
-            e.printStackTrace();
-
-            return false;
-        }
+        try {
+            PreparedStatement ps = DatabaseManager.getConnection().prepareStatement("DELETE FROM contacts WHERE id=?");
+            ps.setInt(1, id);
+            boolean result = ps.executeUpdate() > 0;
+            ps.close();
+            return result;
+        } catch (SQLException e) { e.printStackTrace(); return false; }
     }
 
+    public List<Contact> getAll() {
+        List<Contact> list = new ArrayList<>();
+        try {
+            Statement st = DatabaseManager.getConnection().createStatement();
+            ResultSet rs = st.executeQuery("SELECT * FROM contacts ORDER BY name");
+            while (rs.next()) list.add(mapRow(rs));
+            rs.close();
+            st.close();
+        } catch (SQLException e) { e.printStackTrace(); }
+        return list;
+    }
 
-    // ========================================================
-    // GET CONTACT BY ID
-    // ========================================================
-
-    @Override
     public Contact getById(int id) {
-
-        String sql =
-                "SELECT * FROM contacts WHERE id=?";
-
-
-        try (
-
-                PreparedStatement preparedStatement =
-
-                        DatabaseManager.getConnection()
-                                .prepareStatement(sql)
-        ) {
-
-            preparedStatement.setInt(
-                    1,
-                    id
-            );
-
-
-            ResultSet resultSet =
-                    preparedStatement.executeQuery();
-
-
-            if (resultSet.next()) {
-
-                return extractContact(
-                        resultSet
-                );
+        try {
+            PreparedStatement ps = DatabaseManager.getConnection().prepareStatement("SELECT * FROM contacts WHERE id=?");
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                Contact c = mapRow(rs);
+                rs.close();
+                ps.close();
+                return c;
             }
-
-
-        } catch (SQLException e) {
-
-            e.printStackTrace();
-        }
-
-
+        } catch (SQLException e) { e.printStackTrace(); }
         return null;
     }
 
-
-    // ========================================================
-    // GET ALL CONTACTS
-    // ========================================================
-
-    @Override
-    public List<Contact> getAll() {
-
-        List<Contact> contacts =
-                new ArrayList<>();
-
-
-        String sql =
-                "SELECT * FROM contacts ORDER BY name";
-
-
-        try (
-
-                Statement statement =
-
-                        DatabaseManager.getConnection()
-                                .createStatement();
-
-                ResultSet resultSet =
-
-                        statement.executeQuery(sql)
-        ) {
-
-            while (resultSet.next()) {
-
-                contacts.add(
-                        extractContact(resultSet)
-                );
-            }
-
-
-        } catch (SQLException e) {
-
-            e.printStackTrace();
-        }
-
-
-        return contacts;
-    }
-
-
-    // ========================================================
-    // GET TODAY BIRTHDAYS
-    // ========================================================
-
-    @Override
-    public List<Contact> getTodayBirthdays() {
-
-        List<Contact> allContacts =
-                getAll();
-
-
-        List<Contact> todayBirthdays =
-                new ArrayList<>();
-
-
-        for (Contact contact : allContacts) {
-
-            if (contact.isBirthdayToday()) {
-
-                todayBirthdays.add(contact);
-            }
-        }
-
-
-        return todayBirthdays;
-    }
-
-
-    // ========================================================
-    // GET UPCOMING BIRTHDAYS
-    // ========================================================
-
-    @Override
-    public List<Contact> getUpcoming(int days) {
-
-        List<Contact> allContacts =
-                getAll();
-
-
-        List<Contact> upcoming =
-                new ArrayList<>();
-
-
-        for (Contact contact : allContacts) {
-
-            long daysLeft =
-                    contact.getDaysUntilBirthday();
-
-
-            if (daysLeft >= 0 && daysLeft <= days) {
-
-                upcoming.add(contact);
-            }
-        }
-
-
-        upcoming.sort(
-
-                Comparator.comparingLong(
-                        Contact::getDaysUntilBirthday
-                )
-        );
-
-
-        return upcoming;
-    }
-
-
-    // ========================================================
-    // SEARCH CONTACT
-    // ========================================================
-
-    @Override
-    public List<Contact> search(String keyword) {
-
-        List<Contact> contacts =
-                new ArrayList<>();
-
-
-        String sql =
-
-                "SELECT * FROM contacts " +
-
-                        "WHERE name LIKE ? " +
-
-                        "OR relationship LIKE ? " +
-
-                        "ORDER BY name";
-
-
-        try (
-
-                PreparedStatement preparedStatement =
-
-                        DatabaseManager.getConnection()
-                                .prepareStatement(sql)
-        ) {
-
-            String pattern =
-                    "%" + keyword + "%";
-
-
-            preparedStatement.setString(
-                    1,
-                    pattern
-            );
-
-
-            preparedStatement.setString(
-                    2,
-                    pattern
-            );
-
-
-            ResultSet resultSet =
-                    preparedStatement.executeQuery();
-
-
-            while (resultSet.next()) {
-
-                contacts.add(
-                        extractContact(resultSet)
-                );
-            }
-
-
-        } catch (SQLException e) {
-
-            e.printStackTrace();
-        }
-
-
-        return contacts;
-    }
-
-
-    // ========================================================
-    // EXTRACT CONTACT
-    // ========================================================
-
-    private Contact extractContact(
-            ResultSet resultSet
-    ) throws SQLException {
-
-        Contact contact =
-                new Contact();
-
-
-        contact.setId(
-                resultSet.getInt("id")
-        );
-
-
-        contact.setName(
-                resultSet.getString("name")
-        );
-
-
-        java.sql.Date sqlDate =
-                resultSet.getDate("birth_date");
-
-
-        if (sqlDate != null) {
-
-            contact.setBirthDate(
-                    sqlDate.toLocalDate()
-            );
-        }
-
-
-        contact.setRelationship(
-                resultSet.getString("relationship")
-        );
-
-
-        contact.setReminderDays(
-                resultSet.getInt("reminder_days")
-        );
-
-
-        contact.setNotes(
-                resultSet.getString("notes")
-        );
-
-
-        return contact;
+    private Contact mapRow(ResultSet rs) throws SQLException {
+        Contact c = new Contact();
+        c.setId(rs.getInt("id"));
+        c.setName(rs.getString("name"));
+        c.setBirthDate(rs.getDate("birth_date").toLocalDate());
+        c.setRelationship(rs.getString("relationship"));
+        c.setReminderDays(rs.getInt("reminder_days"));
+        c.setNotes(rs.getString("notes"));
+        return c;
     }
 }
-
-
-// ============================================================
-// CONTROLLER
-// ============================================================
-
-class ContactController {
-
-    private ContactDAO dao =
-            new ContactDAOImpl();
-
-
-    public boolean addContact(Contact contact) {
-
-        if (contact == null ||
-                contact.getName() == null ||
-                contact.getName().trim().isEmpty()) {
-
-            return false;
-        }
-
-
-        return dao.add(contact);
-    }
-
-
-    public boolean updateContact(Contact contact) {
-
-        if (contact == null ||
-                contact.getId() <= 0) {
-
-            return false;
-        }
-
-
-        return dao.update(contact);
-    }
-
-
-    public boolean deleteContact(int id) {
-
-        return dao.delete(id);
-    }
-
-
-    public Contact getContactById(int id) {
-
-        return dao.getById(id);
-    }
-
-
-    public List<Contact> getAllContacts() {
-
-        return dao.getAll();
-    }
-
-
-    public List<Contact> getTodayBirthdays() {
-
-        return dao.getTodayBirthdays();
-    }
-
-
-    public List<Contact> getUpcomingBirthdays(
-            int days
-    ) {
-
-        return dao.getUpcoming(days);
-    }
-
-
-    public List<Contact> searchContacts(
-            String keyword
-    ) {
-
-        if (keyword == null ||
-                keyword.trim().isEmpty()) {
-
-            return dao.getAll();
-        }
-
-
-        return dao.search(
-                keyword.trim()
-        );
-    }
-}
-
-
-// ============================================================
-// ADD / EDIT BIRTHDAY DIALOG
-// ============================================================
-
-class AddEditContactDialog extends JDialog {
-
-    private ContactController controller;
-    private Contact contact;
-    private boolean saved = false;
-
-    private JTextField nameField;
-    private JTextField dateField;
-    private JTextField notesField;
-
-    private JComboBox<String> relationshipCombo;
-    private JSpinner reminderSpinner;
-
-
-    public AddEditContactDialog(
-
-            JFrame parent,
-            ContactController controller,
-            Contact contact
-    ) {
-
-        super(
-
-                parent,
-
-                contact == null
-                        ? "Add Birthday"
-                        : "Edit Birthday",
-
-                true
-        );
-
-
-        this.controller = controller;
-        this.contact = contact;
-
-
-        initializeUI();
-
-
-        if (contact != null) {
-            loadContactData();
-        }
-
-
-        setSize(470, 500);
-
-        setLocationRelativeTo(parent);
-
-        setResizable(false);
-    }
-
-
-    // ========================================================
-    // INITIALIZE UI
-    // ========================================================
-
-    private void initializeUI() {
-
-        Color backgroundColor =
-                new Color(245, 242, 250);
-
-        Color cardColor =
-                Color.WHITE;
-
-        Color textColor =
-                new Color(70, 60, 85);
-
-        Color accentColor =
-                new Color(190, 170, 215);
-
-
-        JPanel mainPanel =
-                new JPanel(
-                        new BorderLayout(10, 10)
-                );
-
-
-        mainPanel.setBackground(
-                backgroundColor
-        );
-
-
-        mainPanel.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        25,
-                        30,
-                        20,
-                        30
-                )
-        );
-
-
-        // HEADER
-
-        JPanel headerPanel =
-                new JPanel();
-
-
-        headerPanel.setLayout(
-
-                new BoxLayout(
-                        headerPanel,
-                        BoxLayout.Y_AXIS
-                )
-        );
-
-
-        headerPanel.setBackground(
-                backgroundColor
-        );
-
-
-        JLabel heading =
-                new JLabel(
-
-                        contact == null
-                                ? "Add New Birthday"
-                                : "Edit Birthday"
-                );
-
-
-        heading.setAlignmentX(
-                Component.CENTER_ALIGNMENT
-        );
-
-
-        heading.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        24
-                )
-        );
-
-
-        heading.setForeground(
-                textColor
-        );
-
-
-        JLabel subtitle =
-                new JLabel(
-                        "Keep track of every special day"
-                );
-
-
-        subtitle.setAlignmentX(
-                Component.CENTER_ALIGNMENT
-        );
-
-
-        subtitle.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        13
-                )
-        );
-
-
-        subtitle.setForeground(
-                new Color(140, 135, 150)
-        );
-
-
-        headerPanel.add(heading);
-
-        headerPanel.add(
-                Box.createVerticalStrut(6)
-        );
-
-        headerPanel.add(subtitle);
-
-
-        // FORM CARD
-
-        JPanel cardPanel =
-                new JPanel(
-                        new GridBagLayout()
-                );
-
-
-        cardPanel.setBackground(
-                cardColor
-        );
-
-
-        cardPanel.setBorder(
-
-                BorderFactory.createCompoundBorder(
-
-                        BorderFactory.createLineBorder(
-                                new Color(225, 220, 235),
-                                1,
-                                true
-                        ),
-
-                        BorderFactory.createEmptyBorder(
-                                18,
-                                20,
-                                18,
-                                20
-                        )
-                )
-        );
-
-
-        GridBagConstraints gbc =
-                new GridBagConstraints();
-
-
-        gbc.insets =
-                new Insets(8, 5, 8, 5);
-
-
-        gbc.fill =
-                GridBagConstraints.HORIZONTAL;
-
-
-        int row = 0;
-
-
-        // NAME
-
-        addLabel(
-                cardPanel,
-                "Name *",
-                gbc,
-                row
-        );
-
-
-        nameField =
-                createTextField();
-
-
-        addField(
-                cardPanel,
-                nameField,
-                gbc,
-                row
-        );
-
-
-        row++;
-
-
-        // BIRTHDAY
-
-        addLabel(
-                cardPanel,
-                "Birthday *",
-                gbc,
-                row
-        );
-
-
-        // Placeholder inside text field
-
-        dateField =
-                new PlaceholderTextField(
-                        "YYYY-MM-DD"
-                );
-
-
-        dateField.setPreferredSize(
-                new Dimension(190, 30)
-        );
-
-
-        dateField.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        13
-                )
-        );
-
-
-        addField(
-                cardPanel,
-                dateField,
-                gbc,
-                row
-        );
-
-
-        row++;
-
-
-        // RELATIONSHIP
-
-        addLabel(
-                cardPanel,
-                "Relationship",
-                gbc,
-                row
-        );
-
-
-        String[] relationships = {
-
-                "Friend",
-                "Family",
-                "Classmate",
-                "Colleague",
-                "Other"
-        };
-
-
-        relationshipCombo =
-                new JComboBox<>(
-                        relationships
-                );
-
-
-        relationshipCombo.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        13
-                )
-        );
-
-
-        addField(
-                cardPanel,
-                relationshipCombo,
-                gbc,
-                row
-        );
-
-
-        row++;
-
-
-        // REMINDER
-
-        addLabel(
-                cardPanel,
-                "Remind Before",
-                gbc,
-                row
-        );
-
-
-        reminderSpinner =
-                new JSpinner(
-
-                        new SpinnerNumberModel(
-                                7,
-                                1,
-                                30,
-                                1
-                        )
-                );
-
-
-        reminderSpinner.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        13
-                )
-        );
-
-
-        addField(
-                cardPanel,
-                reminderSpinner,
-                gbc,
-                row
-        );
-
-
-        row++;
-
-
-        // NOTES
-
-        addLabel(
-                cardPanel,
-                "Notes",
-                gbc,
-                row
-        );
-
-
-        notesField =
-                createTextField();
-
-
-        addField(
-                cardPanel,
-                notesField,
-                gbc,
-                row
-        );
-
-
-        // BUTTONS
-
-        JPanel buttonPanel =
-                new JPanel(
-
-                        new FlowLayout(
-                                FlowLayout.CENTER,
-                                15,
-                                5
-                        )
-                );
-
-
-        buttonPanel.setBackground(
-                backgroundColor
-        );
-
-
-        JButton cancelButton =
-                new JButton("Cancel");
-
-
-        JButton saveButton =
-                new JButton(
-
-                        contact == null
-                                ? "Save Birthday"
-                                : "Update"
-                );
-
-
-        cancelButton.setPreferredSize(
-                new Dimension(110, 36)
-        );
-
-
-        saveButton.setPreferredSize(
-                new Dimension(130, 36)
-        );
-
-
-        cancelButton.setFocusPainted(false);
-        saveButton.setFocusPainted(false);
-
-
-        cancelButton.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        13
-                )
-        );
-
-
-        saveButton.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        13
-                )
-        );
-
-
-        cancelButton.setBackground(
-                new Color(235, 232, 240)
-        );
-
-
-        saveButton.setBackground(
-                accentColor
-        );
-
-
-        cancelButton.addActionListener(
-                e -> dispose()
-        );
-
-
-        saveButton.addActionListener(
-                e -> saveContact()
-        );
-
-
-        buttonPanel.add(cancelButton);
-        buttonPanel.add(saveButton);
-
-
-        JPanel centerWrapper =
-                new JPanel(
-                        new BorderLayout()
-                );
-
-
-        centerWrapper.setBackground(
-                backgroundColor
-        );
-
-
-        centerWrapper.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        18,
-                        0,
-                        5,
-                        0
-                )
-        );
-
-
-        centerWrapper.add(
-                cardPanel,
-                BorderLayout.CENTER
-        );
-
-
-        mainPanel.add(
-                headerPanel,
-                BorderLayout.NORTH
-        );
-
-
-        mainPanel.add(
-                centerWrapper,
-                BorderLayout.CENTER
-        );
-
-
-        mainPanel.add(
-                buttonPanel,
-                BorderLayout.SOUTH
-        );
-
-
-        add(mainPanel);
-
-
-        getRootPane().setDefaultButton(
-                saveButton
-        );
-    }
-
-
-    private void addLabel(
-
-            JPanel panel,
-            String text,
-            GridBagConstraints gbc,
-            int row
-    ) {
-
-        gbc.gridx = 0;
-
-        gbc.gridy = row;
-
-        gbc.weightx = 0.35;
-
-
-        JLabel label =
-                new JLabel(text);
-
-
-        label.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        13
-                )
-        );
-
-
-        label.setForeground(
-                new Color(80, 75, 95)
-        );
-
-
-        panel.add(label, gbc);
-    }
-
-
-    private void addField(
-
-            JPanel panel,
-            Component component,
-            GridBagConstraints gbc,
-            int row
-    ) {
-
-        gbc.gridx = 1;
-
-        gbc.gridy = row;
-
-        gbc.weightx = 0.65;
-
-
-        panel.add(component, gbc);
-    }
-
-
-    private JTextField createTextField() {
-
-        JTextField field =
-                new JTextField();
-
-
-        field.setPreferredSize(
-                new Dimension(190, 30)
-        );
-
-
-        field.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        13
-                )
-        );
-
-
-        return field;
-    }
-
-
-    // ========================================================
-    // LOAD DATA
-    // ========================================================
-
-    private void loadContactData() {
-
-        nameField.setText(
-                contact.getName()
-        );
-
-
-        if (contact.getBirthDate() != null) {
-
-            dateField.setText(
-
-                    DateUtils.formatForDB(
-                            contact.getBirthDate()
-                    )
-            );
-        }
-
-
-        if (contact.getRelationship() != null) {
-
-            relationshipCombo.setSelectedItem(
-                    contact.getRelationship()
-            );
-        }
-
-
-        reminderSpinner.setValue(
-                contact.getReminderDays()
-        );
-
-
-        notesField.setText(
-                contact.getNotes()
-        );
-    }
-
-
-    // ========================================================
-    // SAVE CONTACT
-    // ========================================================
-
-    private void saveContact() {
-
-        String name =
-                nameField.getText().trim();
-
-
-        if (name.isEmpty()) {
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    "Please enter a name.",
-
-                    "Validation Error",
-
-                    JOptionPane.ERROR_MESSAGE
-            );
-
-            return;
-        }
-
-
-        String dateString =
-                dateField.getText().trim();
-
-
-        if (dateString.isEmpty()) {
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    "Please enter a birthday.",
-
-                    "Validation Error",
-
-                    JOptionPane.ERROR_MESSAGE
-            );
-
-            return;
-        }
-
-
-        if (!DateUtils.isValidDate(dateString)) {
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    "Invalid date format.\nPlease use YYYY-MM-DD",
-
-                    "Validation Error",
-
-                    JOptionPane.ERROR_MESSAGE
-            );
-
-            return;
-        }
-
-
-        try {
-
-            LocalDate birthDate =
-                    DateUtils.parseDate(
-                            dateString
-                    );
-
-
-            if (contact == null) {
-
-                contact =
-                        new Contact();
-            }
-
-
-            contact.setName(name);
-
-
-            contact.setBirthDate(
-                    birthDate
-            );
-
-
-            contact.setRelationship(
-
-                    (String)
-                            relationshipCombo.getSelectedItem()
-            );
-
-
-            contact.setReminderDays(
-
-                    (Integer)
-                            reminderSpinner.getValue()
-            );
-
-
-            contact.setNotes(
-
-                    notesField.getText().trim()
-            );
-
-
-            boolean success;
-
-
-            if (contact.getId() == 0) {
-
-                success =
-                        controller.addContact(contact);
-
-            } else {
-
-                success =
-                        controller.updateContact(contact);
-            }
-
-
-            if (success) {
-
-                saved = true;
-
-                dispose();
-
-            } else {
-
-                JOptionPane.showMessageDialog(
-
-                        this,
-
-                        "Unable to save birthday.",
-
-                        "Error",
-
-                        JOptionPane.ERROR_MESSAGE
-                );
-            }
-
-
-        } catch (Exception e) {
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    "Error: " + e.getMessage(),
-
-                    "Error",
-
-                    JOptionPane.ERROR_MESSAGE
-            );
-        }
-    }
-
-
-    public boolean isSaved() {
-
-        return saved;
-    }
-}
-
-
-// ============================================================
-// MAIN FRAME
-// ============================================================
 
 public class MainFrame extends JFrame {
-
-    private ContactController controller;
-
-    private JTable contactTable;
-
-    private DefaultTableModel tableModel;
-
-    private TableRowSorter<DefaultTableModel> rowSorter;
-
+    private ContactDAO dao;
+    private JTable table;
+    private DefaultTableModel model;
     private JTextField searchField;
-
-    private JLabel statusLabel;
-
-    private JLabel birthdayCountLabel;
-
-    private JTabbedPane tabbedPane;
-
-    private JList<String> birthdayList;
-
-    private DefaultListModel<String> birthdayListModel;
-
-
-    private static final DateTimeFormatter DISPLAY_FORMAT =
-
-            DateTimeFormatter.ofPattern(
-                    "dd MMM yyyy"
-            );
-
+    private static final DateTimeFormatter DISPLAY = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     public MainFrame() {
-
-        controller =
-                new ContactController();
-
-
-        initializeUI();
-
-        loadData();
-
-        checkBirthdays();
-    }
-
-
-    // ========================================================
-    // INITIALIZE MAIN UI
-    // ========================================================
-
-    private void initializeUI() {
-
-        setTitle(
-                "Birthday Reminder System"
-        );
-
-
-        setDefaultCloseOperation(
-                JFrame.EXIT_ON_CLOSE
-        );
-
-
-        setSize(
-                950,
-                620
-        );
-
-
-        setMinimumSize(
-                new Dimension(
-                        800,
-                        500
-                )
-        );
-
-
+        dao = new ContactDAO();
+        setTitle("Birthday Reminder System");
+        setSize(900, 600);
         setLocationRelativeTo(null);
-
-
-        setLayout(
-                new BorderLayout()
-        );
-
-
-        createMenuBar();
-
-        createToolbar();
-
-        createTabbedPane();
-
-        createStatusBar();
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        createUI();
+        loadData();
+        checkTodayBirthdays();
     }
 
-
-    // ========================================================
-    // MENU BAR
-    // ========================================================
-
-    private void createMenuBar() {
-
-        JMenuBar menuBar =
-                new JMenuBar();
-
-
-        JMenu fileMenu =
-                new JMenu("File");
-
-
-        JMenuItem addItem =
-                new JMenuItem("Add Birthday");
-
-
-        addItem.addActionListener(
-
-                e ->
-                        showAddEditDialog(null)
-        );
-
-
-        JMenuItem exitItem =
-                new JMenuItem("Exit");
-
-
-        exitItem.addActionListener(
-                e -> System.exit(0)
-        );
-
-
-        fileMenu.add(addItem);
-
-        fileMenu.addSeparator();
-
-        fileMenu.add(exitItem);
-
-
-        JMenu viewMenu =
-                new JMenu("View");
-
-
-        JMenuItem refreshItem =
-                new JMenuItem("Refresh");
-
-
-        refreshItem.addActionListener(
-                e -> loadData()
-        );
-
-
-        JMenuItem todayItem =
-                new JMenuItem("Today's Birthdays");
-
-
-        todayItem.addActionListener(
-                e -> showTodayBirthdays()
-        );
-
-
-        viewMenu.add(refreshItem);
-
-        viewMenu.add(todayItem);
-
-
-        JMenu helpMenu =
-                new JMenu("Help");
-
-
-        JMenuItem aboutItem =
-                new JMenuItem("About");
-
-
-        aboutItem.addActionListener(
-                e -> showAboutDialog()
-        );
-
-
-        helpMenu.add(aboutItem);
-
-
-        menuBar.add(fileMenu);
-
-        menuBar.add(viewMenu);
-
-        menuBar.add(helpMenu);
-
-
-        setJMenuBar(menuBar);
-    }
-
-
-    // ========================================================
-    // TOOLBAR
-    // ========================================================
-
-    private void createToolbar() {
-
-        Color toolbarColor =
-                new Color(245, 242, 250);
-
-
-        JPanel toolbar =
-                new JPanel(
-                        new BorderLayout(15, 10)
-                );
-
-
-        toolbar.setBackground(
-                toolbarColor
-        );
-
-
-        toolbar.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        12,
-                        18,
-                        12,
-                        18
-                )
-        );
-
-
-        JPanel buttonPanel =
-                new JPanel(
-
-                        new FlowLayout(
-                                FlowLayout.LEFT,
-                                8,
-                                0
-                        )
-                );
-
-
-        buttonPanel.setOpaque(false);
-
-
-        JButton addButton =
-                new JButton("Add Birthday");
-
-        JButton editButton =
-                new JButton("Edit");
-
-        JButton deleteButton =
-                new JButton("Delete");
-
-        JButton refreshButton =
-                new JButton("Refresh");
-
-
-        styleToolbarButton(addButton);
-        styleToolbarButton(editButton);
-        styleToolbarButton(deleteButton);
-        styleToolbarButton(refreshButton);
-
-
-        addButton.addActionListener(
-                e -> showAddEditDialog(null)
-        );
-
-
-        editButton.addActionListener(
-                e -> editSelectedContact()
-        );
-
-
-        deleteButton.addActionListener(
-                e -> deleteSelectedContact()
-        );
-
-
-        refreshButton.addActionListener(
-                e -> loadData()
-        );
-
-
-        buttonPanel.add(addButton);
-        buttonPanel.add(editButton);
-        buttonPanel.add(deleteButton);
-        buttonPanel.add(refreshButton);
-
-
-        // SEARCH
-
-        JPanel searchPanel =
-                new JPanel(
-
-                        new FlowLayout(
-                                FlowLayout.RIGHT,
-                                8,
-                                0
-                        )
-                );
-
-
-        searchPanel.setOpaque(false);
-
-
-        JLabel searchLabel =
-                new JLabel("Search");
-
-
-        searchLabel.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        13
-                )
-        );
-
-
-        searchField =
-                new JTextField(15);
-
-
-        searchField.setPreferredSize(
-                new Dimension(170, 30)
-        );
-
-
-        JButton searchButton =
-                new JButton("Find");
-
-
-        styleToolbarButton(searchButton);
-
-
-        searchButton.addActionListener(
-                e -> searchContacts()
-        );
-
-
-        searchField.addActionListener(
-                e -> searchContacts()
-        );
-
-
-        searchPanel.add(searchLabel);
-
-        searchPanel.add(searchField);
-
-        searchPanel.add(searchButton);
-
-
-        toolbar.add(
-                buttonPanel,
-                BorderLayout.WEST
-        );
-
-
-        toolbar.add(
-                searchPanel,
-                BorderLayout.EAST
-        );
-
-
-        add(
-                toolbar,
-                BorderLayout.NORTH
-        );
-    }
-
-
-    private void styleToolbarButton(
-            JButton button
-    ) {
-
-        button.setFocusPainted(false);
-
-
-        button.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        12
-                )
-        );
-
-
-        button.setBackground(
-                Color.WHITE
-        );
-
-
-        button.setPreferredSize(
-                new Dimension(105, 30)
-        );
-    }
-
-
-    // ========================================================
-    // TABBED PANE
-    // ========================================================
-
-    private void createTabbedPane() {
-
-        tabbedPane =
-                new JTabbedPane();
-
-
-        tabbedPane.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        13
-                )
-        );
-
-
-        tabbedPane.addTab(
-                "All Birthdays",
-                createContactsPanel()
-        );
-
-
-        tabbedPane.addTab(
-                "Birthday Reminders",
-                createBirthdayReminderPanel()
-        );
-
-
-        add(
-                tabbedPane,
-                BorderLayout.CENTER
-        );
-    }
-
-
-    // ========================================================
-    // CONTACT TABLE
-    // ========================================================
-
-    private JPanel createContactsPanel() {
-
-        JPanel panel =
-                new JPanel(
-                        new BorderLayout()
-                );
-
-
-        panel.setBackground(
-                Color.WHITE
-        );
-
-
-        panel.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        18,
-                        20,
-                        18,
-                        20
-                )
-        );
-
-
-        String[] columns = {
-
-                "ID",
-                "Name",
-                "Birthday",
-                "Age",
-                "Days Left",
-                "Relationship"
+    private void createUI() {
+        getContentPane().setLayout(new BorderLayout(0, 10));
+        ((JComponent) getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
+        JButton add = new JButton("Add Birthday");
+        JButton edit = new JButton("Edit");
+        JButton delete = new JButton("Delete");
+        JButton refresh = new JButton("Refresh");
+        searchField = new JTextField(15);
+        JButton search = new JButton("Find");
+
+        add.addActionListener(e -> addBirthday());
+        edit.addActionListener(e -> editBirthday());
+        delete.addActionListener(e -> deleteBirthday());
+        refresh.addActionListener(e -> loadData());
+        search.addActionListener(e -> search());
+        searchField.addActionListener(e -> search());
+
+        top.add(add); top.add(edit); top.add(delete); top.add(refresh);
+        top.add(new JLabel("   Search:")); top.add(searchField); top.add(search);
+        add(top, BorderLayout.NORTH);
+
+        String[] columns = {"ID", "Name", "Birthday", "Age", "Days Left", "Relationship"};
+        model = new DefaultTableModel(columns, 0) {
+            public boolean isCellEditable(int r, int c) { return false; }
         };
-
-
-        tableModel =
-                new DefaultTableModel(
-                        columns,
-                        0
-                ) {
-
-                    @Override
-                    public boolean isCellEditable(
-                            int row,
-                            int column
-                    ) {
-
-                        return false;
-                    }
-                };
-
-
-        contactTable =
-                new JTable(tableModel);
-
-
-        contactTable.setRowHeight(38);
-
-
-        contactTable.setSelectionMode(
-                ListSelectionModel.SINGLE_SELECTION
-        );
-
-
-        contactTable.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        14
-                )
-        );
-
-
-        contactTable.setShowGrid(false);
-
-
-        contactTable.setIntercellSpacing(
-                new Dimension(0, 0)
-        );
-
-
-        contactTable.setSelectionBackground(
-                new Color(225, 215, 238)
-        );
-
-
-        contactTable.getTableHeader().setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        13
-                )
-        );
-
-
-        contactTable.getTableHeader().setPreferredSize(
-                new Dimension(0, 40)
-        );
-
-
-        contactTable.getTableHeader().setBackground(
-                new Color(235, 230, 242)
-        );
-
-
-        rowSorter =
-                new TableRowSorter<>(
-                        tableModel
-                );
-
-
-        contactTable.setRowSorter(
-                rowSorter
-        );
-
-
-        DefaultTableCellRenderer centerRenderer =
-                new DefaultTableCellRenderer();
-
-
-        centerRenderer.setHorizontalAlignment(
-                SwingConstants.CENTER
-        );
-
-
-        for (int i = 0; i < columns.length; i++) {
-
-            if (i != 1) {
-
-                contactTable
-                        .getColumnModel()
-                        .getColumn(i)
-                        .setCellRenderer(
-                                centerRenderer
-                        );
-            }
-        }
-
-
-        contactTable
-                .getColumnModel()
-                .getColumn(0)
-                .setPreferredWidth(45);
-
-
-        contactTable
-                .getColumnModel()
-                .getColumn(1)
-                .setPreferredWidth(200);
-
-
-        contactTable
-                .getColumnModel()
-                .getColumn(2)
-                .setPreferredWidth(140);
-
-
-        contactTable
-                .getColumnModel()
-                .getColumn(3)
-                .setPreferredWidth(70);
-
-
-        contactTable
-                .getColumnModel()
-                .getColumn(4)
-                .setPreferredWidth(100);
-
-
-        contactTable
-                .getColumnModel()
-                .getColumn(5)
-                .setPreferredWidth(140);
-
-
-        JScrollPane scrollPane =
-                new JScrollPane(contactTable);
-
-
-        scrollPane.setBorder(
-
-                BorderFactory.createLineBorder(
-                        new Color(225, 220, 235)
-                )
-        );
-
-
-        panel.add(
-                scrollPane,
-                BorderLayout.CENTER
-        );
-
-
-        contactTable.addMouseListener(
-
-                new MouseAdapter() {
-
-                    @Override
-                    public void mouseClicked(
-                            MouseEvent event
-                    ) {
-
-                        if (event.getClickCount() == 2) {
-
-                            editSelectedContact();
-                        }
-                    }
-                }
-        );
-
-
-        return panel;
+        table = new JTable(model);
+        table.setRowHeight(32);
+        table.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 13));
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
+        table.setFillsViewportHeight(true);
+        table.setGridColor(new Color(230, 230, 230));
+
+        table.getColumnModel().getColumn(0).setPreferredWidth(40);   // ID
+        table.getColumnModel().getColumn(1).setPreferredWidth(160);  // Name
+        table.getColumnModel().getColumn(2).setPreferredWidth(120);  // Birthday
+        table.getColumnModel().getColumn(3).setPreferredWidth(60);   // Age
+        table.getColumnModel().getColumn(4).setPreferredWidth(90);   // Days Left
+        table.getColumnModel().getColumn(5).setPreferredWidth(120);  // Relationship
+
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200)));
+        add(scrollPane, BorderLayout.CENTER);
     }
-
-
-    // ========================================================
-    // BIRTHDAY REMINDER PANEL
-    // ========================================================
-
-    private JPanel createBirthdayReminderPanel() {
-
-        JPanel panel =
-                new JPanel(
-                        new BorderLayout(15, 15)
-                );
-
-
-        panel.setBackground(
-                new Color(248, 247, 251)
-        );
-
-
-        panel.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        30,
-                        35,
-                        25,
-                        35
-                )
-        );
-
-
-        JPanel headerPanel =
-                new JPanel();
-
-
-        headerPanel.setLayout(
-
-                new BoxLayout(
-                        headerPanel,
-                        BoxLayout.Y_AXIS
-                )
-        );
-
-
-        headerPanel.setOpaque(false);
-
-
-        JLabel titleLabel =
-                new JLabel(
-                        "Upcoming Birthday Reminders"
-                );
-
-
-        titleLabel.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        23
-                )
-        );
-
-
-        titleLabel.setForeground(
-                new Color(70, 60, 90)
-        );
-
-
-        titleLabel.setAlignmentX(
-                Component.CENTER_ALIGNMENT
-        );
-
-
-        JLabel subtitle =
-                new JLabel(
-                        "Birthdays coming up in the next 7 days"
-                );
-
-
-        subtitle.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        13
-                )
-        );
-
-
-        subtitle.setForeground(
-                new Color(130, 125, 145)
-        );
-
-
-        subtitle.setAlignmentX(
-                Component.CENTER_ALIGNMENT
-        );
-
-
-        headerPanel.add(titleLabel);
-
-        headerPanel.add(
-                Box.createVerticalStrut(7)
-        );
-
-        headerPanel.add(subtitle);
-
-
-        panel.add(
-                headerPanel,
-                BorderLayout.NORTH
-        );
-
-
-        birthdayListModel =
-                new DefaultListModel<>();
-
-
-        birthdayList =
-                new JList<>(
-                        birthdayListModel
-                );
-
-
-        birthdayList.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        15
-                )
-        );
-
-
-        birthdayList.setFixedCellHeight(42);
-
-        birthdayList.setBackground(Color.WHITE);
-
-
-        birthdayList.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        10,
-                        15,
-                        10,
-                        15
-                )
-        );
-
-
-        JScrollPane scrollPane =
-                new JScrollPane(
-                        birthdayList
-                );
-
-
-        scrollPane.setBorder(
-
-                BorderFactory.createLineBorder(
-                        new Color(225, 220, 235)
-                )
-        );
-
-
-        panel.add(
-                scrollPane,
-                BorderLayout.CENTER
-        );
-
-
-        JPanel buttonPanel =
-                new JPanel(
-
-                        new FlowLayout(
-                                FlowLayout.CENTER,
-                                12,
-                                5
-                        )
-                );
-
-
-        buttonPanel.setOpaque(false);
-
-
-        JButton refreshButton =
-                new JButton("Refresh");
-
-
-        JButton viewAllButton =
-                new JButton("View All");
-
-
-        refreshButton.setFocusPainted(false);
-        viewAllButton.setFocusPainted(false);
-
-
-        refreshButton.setPreferredSize(
-                new Dimension(110, 34)
-        );
-
-
-        viewAllButton.setPreferredSize(
-                new Dimension(110, 34)
-        );
-
-
-        refreshButton.addActionListener(
-                e -> updateBirthdayList()
-        );
-
-
-        viewAllButton.addActionListener(
-
-                e ->
-                        tabbedPane.setSelectedIndex(0)
-        );
-
-
-        buttonPanel.add(refreshButton);
-        buttonPanel.add(viewAllButton);
-
-
-        panel.add(
-                buttonPanel,
-                BorderLayout.SOUTH
-        );
-
-
-        return panel;
-    }
-
-
-    // ========================================================
-    // STATUS BAR
-    // ========================================================
-
-    private void createStatusBar() {
-
-        JPanel statusBar =
-                new JPanel(
-                        new BorderLayout()
-                );
-
-
-        statusBar.setBackground(
-                new Color(245, 242, 250)
-        );
-
-
-        statusBar.setBorder(
-
-                BorderFactory.createEmptyBorder(
-                        8,
-                        15,
-                        8,
-                        15
-                )
-        );
-
-
-        statusLabel =
-                new JLabel("Ready");
-
-
-        birthdayCountLabel =
-                new JLabel(
-                        "Today's Birthdays: 0"
-                );
-
-
-        statusLabel.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.PLAIN,
-                        12
-                )
-        );
-
-
-        birthdayCountLabel.setFont(
-
-                new Font(
-                        "SansSerif",
-                        Font.BOLD,
-                        12
-                )
-        );
-
-
-        statusBar.add(
-                statusLabel,
-                BorderLayout.WEST
-        );
-
-
-        statusBar.add(
-                birthdayCountLabel,
-                BorderLayout.EAST
-        );
-
-
-        add(
-                statusBar,
-                BorderLayout.SOUTH
-        );
-    }
-
-
-    // ========================================================
-    // LOAD DATA
-    // ========================================================
 
     private void loadData() {
-
-        tableModel.setRowCount(0);
-
-
-        List<Contact> contacts =
-                controller.getAllContacts();
-
-
-        for (Contact contact : contacts) {
-
-            Object[] row = {
-
-                    contact.getId(),
-
-                    contact.getName(),
-
-                    contact.getBirthDate() != null
-
-                            ? contact.getBirthDate()
-                            .format(DISPLAY_FORMAT)
-
-                            : "",
-
-                    contact.getAge(),
-
-                    contact.getDaysUntilBirthday(),
-
-                    contact.getRelationship() != null
-
-                            ? contact.getRelationship()
-
-                            : ""
-            };
-
-
-            tableModel.addRow(row);
-        }
-
-
-        statusLabel.setText(
-                "Total Birthdays: " + contacts.size()
-        );
-
-
-        updateBirthdayList();
-
-        updateBirthdayCount();
+        model.setRowCount(0);
+        for (Contact c : dao.getAll()) addRow(c);
     }
 
-
-    // ========================================================
-    // SEARCH
-    // ========================================================
-
-    private void searchContacts() {
-
-        String keyword =
-                searchField.getText().trim();
-
-
-        tableModel.setRowCount(0);
-
-
-        List<Contact> contacts =
-                controller.searchContacts(keyword);
-
-
-        for (Contact contact : contacts) {
-
-            Object[] row = {
-
-                    contact.getId(),
-
-                    contact.getName(),
-
-                    contact.getBirthDate() != null
-
-                            ? contact.getBirthDate()
-                            .format(DISPLAY_FORMAT)
-
-                            : "",
-
-                    contact.getAge(),
-
-                    contact.getDaysUntilBirthday(),
-
-                    contact.getRelationship() != null
-
-                            ? contact.getRelationship()
-
-                            : ""
-            };
-
-
-            tableModel.addRow(row);
-        }
-
-
-        statusLabel.setText(
-                "Found " + contacts.size() + " result(s)"
-        );
+    private void addRow(Contact c) {
+        model.addRow(new Object[]{c.getId(), c.getName(), c.getBirthDate().format(DISPLAY),
+                c.getAge(), c.getDaysUntilBirthday(), c.getRelationship()});
     }
 
-
-    // ========================================================
-    // UPDATE BIRTHDAY LIST
-    // ========================================================
-
-    private void updateBirthdayList() {
-
-        birthdayListModel.clear();
-
-
-        List<Contact> upcomingBirthdays =
-
-                controller.getUpcomingBirthdays(7);
-
-
-        if (upcomingBirthdays.isEmpty()) {
-
-            birthdayListModel.addElement(
-
-                    "No upcoming birthdays in the next 7 days"
-            );
-
-            return;
-        }
-
-
-        for (Contact contact : upcomingBirthdays) {
-
-            long daysLeft =
-                    contact.getDaysUntilBirthday();
-
-
-            String entry;
-
-
-            if (daysLeft == 0) {
-
-                entry =
-                        "TODAY - "
-                                + contact.getName()
-                                + "'s Birthday";
-
-            } else if (daysLeft == 1) {
-
-                entry =
-                        "TOMORROW - "
-                                + contact.getName()
-                                + "'s Birthday";
-
-            } else {
-
-                entry =
-                        contact.getName()
-                                + " - "
-                                + daysLeft
-                                + " days left";
-            }
-
-
-            birthdayListModel.addElement(entry);
-        }
+    private JPanel buildFormPanel(JTextField name, JTextField date, JComboBox<String> relation, JTextField notes) {
+        JPanel panel = new JPanel(new GridLayout(0, 2, 8, 8));
+        panel.add(new JLabel("Name:")); panel.add(name);
+        panel.add(new JLabel("Birthday (yyyy-MM-dd):")); panel.add(date);
+        panel.add(new JLabel("Relationship:")); panel.add(relation);
+        panel.add(new JLabel("Notes:")); panel.add(notes);
+        return panel;
     }
 
-
-    // ========================================================
-    // UPDATE TODAY COUNT
-    // ========================================================
-
-    private void updateBirthdayCount() {
-
-        List<Contact> todayBirthdays =
-                controller.getTodayBirthdays();
-
-
-        birthdayCountLabel.setText(
-
-                "Today's Birthdays: "
-                        + todayBirthdays.size()
-        );
+    private JComboBox<String> relationBox() {
+        return new JComboBox<>(new String[]{"Friend", "Family", "Classmate", "Colleague", "Other"});
     }
 
+    private void addBirthday() {
+        JTextField name = new JTextField(), date = new JTextField(), notes = new JTextField();
+        JComboBox<String> relation = relationBox();
+        JPanel panel = buildFormPanel(name, date, relation, notes);
 
-    // ========================================================
-    // CHECK BIRTHDAYS
-    // ========================================================
+        int result = JOptionPane.showConfirmDialog(this, panel, "Add Birthday", JOptionPane.OK_CANCEL_OPTION);
+        if (result != JOptionPane.OK_OPTION) return;
 
-    private void checkBirthdays() {
+        String nameText = name.getText().trim(), dateText = date.getText().trim();
+        if (nameText.isEmpty()) { showError("Please enter a name."); return; }
+        if (dateText.isEmpty()) { showError("Please enter a birthday."); return; }
+        if (!DateUtils.isValid(dateText)) { showError("Invalid date! Use YYYY-MM-DD, e.g. 2006-12-07"); return; }
 
-        List<Contact> todayBirthdays =
-                controller.getTodayBirthdays();
+        LocalDate birthDate = DateUtils.parse(dateText);
+        if (birthDate.isAfter(LocalDate.now())) { showError("Birthday cannot be a future date."); return; }
 
+        Contact c = new Contact();
+        c.setName(nameText);
+        c.setBirthDate(birthDate);
+        c.setRelationship((String) relation.getSelectedItem());
+        c.setNotes(notes.getText().trim());
 
-        if (!todayBirthdays.isEmpty()) {
-
-            StringBuilder message =
-                    new StringBuilder(
-                            "Today's Birthdays:\n\n"
-                    );
-
-
-            for (Contact contact : todayBirthdays) {
-
-                message.append(
-                        contact.getName()
-                );
-
-                message.append("\n");
-            }
-
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    message.toString(),
-
-                    "Birthday Reminder",
-
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-        }
+        if (dao.add(c)) { JOptionPane.showMessageDialog(this, "Birthday added successfully."); loadData(); }
+        else showError("Unable to save birthday.");
     }
 
+    private void editBirthday() {
+        int row = table.getSelectedRow();
+        if (row == -1) { JOptionPane.showMessageDialog(this, "Please select a birthday to edit."); return; }
 
-    // ========================================================
-    // SHOW TODAY BIRTHDAYS
-    // ========================================================
+        int id = (int) model.getValueAt(row, 0);
+        Contact c = dao.getById(id);
+        if (c == null) return;
 
-    private void showTodayBirthdays() {
+        JTextField name = new JTextField(c.getName());
+        JTextField date = new JTextField(c.getBirthDate().toString());
+        JTextField notes = new JTextField(c.getNotes());
+        JComboBox<String> relation = relationBox();
+        relation.setSelectedItem(c.getRelationship());
+        JPanel panel = buildFormPanel(name, date, relation, notes);
 
-        List<Contact> todayBirthdays =
-                controller.getTodayBirthdays();
+        int result = JOptionPane.showConfirmDialog(this, panel, "Edit Birthday", JOptionPane.OK_CANCEL_OPTION);
+        if (result != JOptionPane.OK_OPTION) return;
 
+        String dateText = date.getText().trim();
+        if (!DateUtils.isValid(dateText)) { showError("Invalid date! Use YYYY-MM-DD."); return; }
 
-        if (todayBirthdays.isEmpty()) {
+        LocalDate birthDate = DateUtils.parse(dateText);
+        if (birthDate.isAfter(LocalDate.now())) { showError("Birthday cannot be a future date."); return; }
 
-            JOptionPane.showMessageDialog(
+        c.setName(name.getText().trim());
+        c.setBirthDate(birthDate);
+        c.setRelationship((String) relation.getSelectedItem());
+        c.setNotes(notes.getText().trim());
 
-                    this,
-
-                    "No birthdays today.",
-
-                    "Today's Birthdays",
-
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-
-            return;
-        }
-
-
-        StringBuilder message =
-                new StringBuilder(
-                        "Today's Birthdays:\n\n"
-                );
-
-
-        for (Contact contact : todayBirthdays) {
-
-            message.append(
-                    contact.getName()
-            );
-
-            message.append("\n");
-        }
-
-
-        JOptionPane.showMessageDialog(
-
-                this,
-
-                message.toString(),
-
-                "Today's Birthdays",
-
-                JOptionPane.INFORMATION_MESSAGE
-        );
+        if (dao.update(c)) { JOptionPane.showMessageDialog(this, "Birthday updated successfully."); loadData(); }
     }
 
+    private void deleteBirthday() {
+        int row = table.getSelectedRow();
+        if (row == -1) { JOptionPane.showMessageDialog(this, "Please select a birthday to delete."); return; }
 
-    // ========================================================
-    // SHOW ADD / EDIT DIALOG
-    // ========================================================
+        int id = (int) model.getValueAt(row, 0);
+        String name = (String) model.getValueAt(row, 1);
+        int confirm = JOptionPane.showConfirmDialog(this, "Delete " + name + "'s birthday?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
 
-    private void showAddEditDialog(
-            Contact contact
-    ) {
-
-        AddEditContactDialog dialog =
-
-                new AddEditContactDialog(
-
-                        this,
-
-                        controller,
-
-                        contact
-                );
-
-
-        dialog.setVisible(true);
-
-
-        if (dialog.isSaved()) {
-
+        if (confirm == JOptionPane.YES_OPTION && dao.delete(id)) {
             loadData();
+            JOptionPane.showMessageDialog(this, "Birthday deleted successfully.");
         }
     }
 
-
-    // ========================================================
-    // EDIT
-    // ========================================================
-
-    private void editSelectedContact() {
-
-        int selectedRow =
-                contactTable.getSelectedRow();
-
-
-        if (selectedRow == -1) {
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    "Please select a birthday to edit."
-            );
-
-            return;
-        }
-
-
-        int modelRow =
-
-                contactTable.convertRowIndexToModel(
-                        selectedRow
-                );
-
-
-        int id =
-
-                (int) tableModel.getValueAt(
-                        modelRow,
-                        0
-                );
-
-
-        Contact contact =
-                controller.getContactById(id);
-
-
-        if (contact != null) {
-
-            showAddEditDialog(contact);
+    private void search() {
+        String keyword = searchField.getText().trim().toLowerCase();
+        model.setRowCount(0);
+        for (Contact c : dao.getAll()) {
+            if (c.getName().toLowerCase().contains(keyword) || c.getRelationship().toLowerCase().contains(keyword))
+                addRow(c);
         }
     }
 
-
-    // ========================================================
-    // DELETE
-    // ========================================================
-
-    private void deleteSelectedContact() {
-
-        int selectedRow =
-                contactTable.getSelectedRow();
-
-
-        if (selectedRow == -1) {
-
-            JOptionPane.showMessageDialog(
-
-                    this,
-
-                    "Please select a birthday to delete."
-            );
-
-            return;
+    private void checkTodayBirthdays() {
+        StringBuilder message = new StringBuilder();
+        for (Contact c : dao.getAll()) {
+            if (c.isBirthdayToday()) message.append(c.getName()).append("\n");
         }
-
-
-        int modelRow =
-
-                contactTable.convertRowIndexToModel(
-                        selectedRow
-                );
-
-
-        int id =
-
-                (int) tableModel.getValueAt(
-                        modelRow,
-                        0
-                );
-
-
-        String name =
-
-                (String) tableModel.getValueAt(
-                        modelRow,
-                        1
-                );
-
-
-        int confirmation =
-                JOptionPane.showConfirmDialog(
-
-                        this,
-
-                        "Are you sure you want to delete "
-                                + name
-                                + "'s birthday?",
-
-                        "Confirm Delete",
-
-                        JOptionPane.YES_NO_OPTION,
-
-                        JOptionPane.WARNING_MESSAGE
-                );
-
-
-        if (confirmation == JOptionPane.YES_OPTION) {
-
-            boolean deleted =
-                    controller.deleteContact(id);
-
-
-            if (deleted) {
-
-                loadData();
-
-
-                JOptionPane.showMessageDialog(
-
-                        this,
-
-                        "Birthday deleted successfully."
-                );
-
-            } else {
-
-                JOptionPane.showMessageDialog(
-
-                        this,
-
-                        "Failed to delete birthday.",
-
-                        "Error",
-
-                        JOptionPane.ERROR_MESSAGE
-                );
-            }
+        if (message.length() > 0) {
+            JOptionPane.showMessageDialog(this, "Today's Birthdays:\n\n" + message,
+                    "Birthday Reminder", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
-
-    // ========================================================
-    // ABOUT
-    // ========================================================
-
-    private void showAboutDialog() {
-
-        String message =
-
-                "Birthday Reminder System\n\n"
-
-                        + "Built using Java Swing, AWT and JDBC\n"
-
-                        + "Database: MySQL\n\n"
-
-                        + "Version 1.0";
-
-
-        JOptionPane.showMessageDialog(
-
-                this,
-
-                message,
-
-                "About",
-
-                JOptionPane.INFORMATION_MESSAGE
-        );
+    private void showError(String msg) {
+        JOptionPane.showMessageDialog(this, msg, "Validation Error", JOptionPane.ERROR_MESSAGE);
     }
-
-
-    // ========================================================
-    // MAIN
-    // ========================================================
 
     public static void main(String[] args) {
-
         DatabaseManager.setupDatabase();
-
-
-        SwingUtilities.invokeLater(
-
-                () -> {
-
-                    try {
-
-                        UIManager.setLookAndFeel(
-
-                                UIManager
-                                        .getSystemLookAndFeelClassName()
-                        );
-
-                    } catch (Exception e) {
-
-                        e.printStackTrace();
-                    }
-
-
-                    MainFrame frame =
-                            new MainFrame();
-
-
-                    frame.setVisible(true);
-                }
-        );
+        SwingUtilities.invokeLater(() -> new MainFrame().setVisible(true));
     }
 }
